@@ -22,6 +22,31 @@ _cache = threading.local()
 def diff(x,order=1,period=None, _cache=_cache):
     """
     Return kth derivative (or integral) of a periodic sequence x.
+
+    If x_j and y_j are Fourier coefficients of periodic functions x
+    and y, respectively, then::
+
+      y_j = pow(sqrt(-1)*j*2*pi/period, order) * x_j
+      y_0 = 0 if order is not 0.
+
+    Parameters
+    ----------
+    x : array_like
+        Input array.
+    order : int, optional
+        The order of differentiation. Default order is 1. If order is
+        negative, then integration is carried out under the assumption
+        that ``x_0 == 0``.
+    period : float, optional
+        The assumed period of the sequence. Default is ``2*pi``.
+
+    Notes
+    -----
+    If ``sum(x, axis=0) = 0`` then ``diff(diff(x, k), -k) == x`` (within
+    numerical accuracy).
+
+    For odd order and even ``len(x)``, the Nyquist mode is taken zero.
+
     """
     if _cache is None:
         _cache = getattr(threading.local(), 'diff_cache', None)
