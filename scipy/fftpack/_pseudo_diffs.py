@@ -1,6 +1,12 @@
 """
 Differential and pseudo-differential operators.
 """
+import threading
+import numpy as np
+from numpy import asarray, iscomplexobj, pi
+from scipy.fft._pocketfft.helper import _datacopied
+from scipy.fftpack import convolve
+
 # Created by Pearu Peterson, September 2002
 
 __all__ = ['diff',
@@ -23,63 +29,54 @@ def diff(x,order=1,period=None, _cache=_cache):
     """
     Return kth derivative (or integral) of a periodic sequence x.
 
-    If x_j and y_j are Fourier coefficients of periodic functions x
-    and y, respectively, then::
-
-      y_j = pow(sqrt(-1)*j*2*pi/period, order) * x_j
-      y_0 = 0 if order is not 0.
-
     Parameters
     ----------
     x : array_like
         Input array.
     order : int, optional
-        The order of differentiation. Default order is 1. If order is
-        negative, then integration is carried out under the assumption
-        that ``x_0 == 0``.
+        The order of differentiation. Default order is 1.
     period : float, optional
         The assumed period of the sequence. Default is ``2*pi``.
 
-    Notes
-    -----
-    If ``sum(x, axis=0) = 0`` then ``diff(diff(x, k), -k) == x`` (within
-    numerical accuracy).
-
-    For odd order and even ``len(x)``, the Nyquist mode is taken zero.
-
+    Returns
+    -------
+    array_like
+        The kth derivative or integral.
     """
-    if isinstance(_cache, threading.local):
-        if not hasattr(_cache, 'diff_cache'):
-            _cache.diff_cache = {}
-        _cache = _cache.diff_cache
+    if _cache is None:
+        _cache = getattr(threading.local(), 'diff_cache', dict())
+        threading.local().diff_cache = _cache
 
     tmp = asarray(x)
     if order == 0:
         return tmp
+
     if iscomplexobj(tmp):
-        return diff(tmp.real, order, period, _cache)+1j*diff(
-            tmp.imag, order, period, _cache)
-    if period is not None:
-        c = 2*pi/period
-    else:
-        c = 1.0
+        real_diff = diff(tmp.real, order, period, _cache)
+        imag_diff = diff(tmp.imag, order, period, _cache)
+        return real_diff + 1j * imag_diff
+
+    c = 2 * pi / period if period is not None else 1.0
     n = len(x)
-    omega = _cache.get((n,order,c))
+    
+    omega_key = (n, order, c)
+    omega = _cache.get(omega_key)
+
     if omega is None:
         if len(_cache) > 20:
-            while _cache:
-                _cache.popitem()
+            _cache.clear()  # Efficiently clear the cache when it grows too large
 
-        def kernel(k,order=order,c=c):
-            if k:
-                return pow(c*k,order)
-            return 0
-        omega = convolve.init_convolution_kernel(n,kernel,d=order,
-                                                 zero_nyquist=1)
-        _cache[(n,order,c)] = omega
+        k = np.arange(n)
+        omega = np.where(k != 0, np.power(c * k, order), 0)
+        
+        if order % 2:  # If the order is odd and length of x is even
+            if n % 2 == 0:
+                omega[n // 2] = 0
+        
+        _cache[omega_key] = omega
+
     overwrite_x = _datacopied(tmp, x)
-    return convolve.convolve(tmp,omega,swap_real_imag=order % 2,
-                             overwrite_x=overwrite_x)
+    return convolve.convolve(tmp, omega, swap_real_imag=order % 2, overwrite_x=overwrite_x)
 
 
 def tilbert(x, h, period=None, _cache=_cache):
