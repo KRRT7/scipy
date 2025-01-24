@@ -1,10 +1,6 @@
 """
 Differential and pseudo-differential operators.
 """
-import threading
-from numpy import asarray, iscomplexobj, pi
-from scipy.fftpack import convolve
-
 # Created by Pearu Peterson, September 2002
 
 __all__ = ['diff',
