@@ -2,6 +2,8 @@
 # Use the `scipy.signal` namespace for importing the functions
 # included below.
 
+from importlib import import_module
+
 from scipy._lib.deprecation import _sub_module_deprecation
 
 __all__ = [  # noqa: F822
@@ -23,6 +25,23 @@ def __dir__():
 
 
 def __getattr__(name):
-    return _sub_module_deprecation(sub_package="signal", module="filter_design",
-                                   private_modules=["_filter_design"], all=__all__,
-                                   attribute=name)
+    return _sub_module_deprecation(
+        sub_package="signal", module="filter_design",
+        private_modules=["_filter_design"], all=__all__,
+        attribute=name
+    )
+
+
+def _get_attribute_from_private_modules(sub_package, private_modules, attribute):
+    """Helper function to attempt importing an attribute from a list of private modules."""
+    for module in private_modules:
+        try:
+            # Attempt to import the attribute from the current module
+            return getattr(import_module(f"scipy.{sub_package}.{module}"), attribute)
+        except AttributeError:
+            # Continue if the attribute isn't in the current private module
+            continue
+    # If the loop completes without returning, raise an AttributeError
+    raise AttributeError(
+        f"Module `scipy.{sub_package}.{module}` has no attribute `{attribute}`."
+    )

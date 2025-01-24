@@ -1,9 +1,9 @@
-from inspect import Parameter, signature
 import functools
 import warnings
 from importlib import import_module
-from scipy._lib._docscrape import FunctionDoc
+from inspect import Parameter, signature
 
+from scipy._lib._docscrape import FunctionDoc
 
 __all__ = ["_deprecated"]
 
@@ -36,10 +36,7 @@ def _sub_module_deprecation(*, sub_package, module, private_modules, all,
     dep_version : str, optional
         Version in which deprecated attributes will be removed.
     """
-    if correct_module is not None:
-        correct_import = f"scipy.{sub_package}.{correct_module}"
-    else:
-        correct_import = f"scipy.{sub_package}"
+    correct_import = f"scipy.{sub_package}.{correct_module}" if correct_module else f"scipy.{sub_package}"
 
     if attribute not in all:
         raise AttributeError(
@@ -51,32 +48,26 @@ def _sub_module_deprecation(*, sub_package, module, private_modules, all,
     attr = getattr(import_module(correct_import), attribute, None)
 
     if attr is not None:
-        message = (
+        warnings.warn(
             f"Please import `{attribute}` from the `{correct_import}` namespace; "
             f"the `scipy.{sub_package}.{module}` namespace is deprecated "
-            f"and will be removed in SciPy 2.0.0."
+            f"and will be removed in SciPy 2.0.0.",
+            category=DeprecationWarning,
+            stacklevel=3
         )
-    else:
-        message = (
-            f"`scipy.{sub_package}.{module}.{attribute}` is deprecated along with "
-            f"the `scipy.{sub_package}.{module}` namespace. "
-            f"`scipy.{sub_package}.{module}.{attribute}` will be removed "
-            f"in SciPy {dep_version}, and the `scipy.{sub_package}.{module}` namespace "
-            f"will be removed in SciPy 2.0.0."
-        )
+        return attr
 
-    warnings.warn(message, category=DeprecationWarning, stacklevel=3)
+    warnings.warn(
+        f"`scipy.{sub_package}.{module}.{attribute}` is deprecated along with "
+        f"the `scipy.{sub_package}.{module}` namespace. "
+        f"`scipy.{sub_package}.{module}.{attribute}` will be removed "
+        f"in SciPy {dep_version}, and the `scipy.{sub_package}.{module}` namespace "
+        f"will be removed in SciPy 2.0.0.",
+        category=DeprecationWarning,
+        stacklevel=3
+    )
 
-    for module in private_modules:
-        try:
-            return getattr(import_module(f"scipy.{sub_package}.{module}"), attribute)
-        except AttributeError as e:
-            # still raise an error if the attribute isn't in any of the expected
-            # private modules
-            if module == private_modules[-1]:
-                raise e
-            continue
-    
+    return _get_attribute_from_private_modules(sub_package, private_modules, attribute)
 
 def _deprecated(msg, stacklevel=2):
     """Deprecate a function by emitting a warning on use."""
@@ -272,3 +263,18 @@ def _deprecate_positional_args(func=None, *, version=None,
         return _inner_deprecate_positional_args(func)
 
     return _inner_deprecate_positional_args
+
+
+def _get_attribute_from_private_modules(sub_package, private_modules, attribute):
+    """Helper function to attempt importing an attribute from a list of private modules."""
+    for module in private_modules:
+        try:
+            # Attempt to import the attribute from the current module
+            return getattr(import_module(f"scipy.{sub_package}.{module}"), attribute)
+        except AttributeError:
+            # Continue if the attribute isn't in the current private module
+            continue
+    # If the loop completes without returning, raise an AttributeError
+    raise AttributeError(
+        f"Module `scipy.{sub_package}.{module}` has no attribute `{attribute}`."
+    )
