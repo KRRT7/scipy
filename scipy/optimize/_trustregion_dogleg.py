@@ -55,8 +55,9 @@ class DoglegSubproblem(BaseQuadraticSubproblem):
         if self._newton_point is None:
             g = self.jac
             B = self.hess
-            cho_info = scipy.linalg.cho_factor(B)
-            self._newton_point = -scipy.linalg.cho_solve(cho_info, g)
+            # Use in-place processing for factorization and solving if beneficial
+            cho_info = scipy.linalg.cho_factor(B, overwrite_a=True, check_finite=False)
+            self._newton_point = -scipy.linalg.cho_solve(cho_info, g, overwrite_b=True, check_finite=False)
         return self._newton_point
 
     def solve(self, trust_radius):
